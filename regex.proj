@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTarget="TestBuild" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	
+	<PropertyGroup>
+		<CmdLine>"c:\windows\microsoft.net\framework64\v4.0.30319\msbuild.exe" /nologo /noconsolelogger "e:\tfsbuild\1\development\6107 dev deployment\sources\006107\buildscripts\psakebuild.proj" /m:1 /fl /flp:"logfile=e:\tfsbuild\1\development\6107 dev deployment\sources\006107\buildscripts\psakebuild.log;encoding=unicode;verbosity=normal" /p:skipinvalidconfigurations=true /p:projectstobuild="..\marketingwebsource\applications\safeauto.static\safeauto.web.static.sln;..\websource\safe auto systems.sln" /p:psaketask=deploymentbuild /p:outdir="e:\tfsbuild\1\development\6107 dev deployment\binaries\\" /p:configuration="debug" /p:platform="any cpu" /p:vcbuildoverride="e:\tfsbuild\1\development\6107 dev deployment\sources\006107\buildscripts\psakebuild.proj.any cpu.debug.vsprops"  /dl:workflowcentrallogger,"d:\program files\microsoft team foundation server 2010\tools\microsoft.teamfoundation.build.server.logger.dll";"verbosity=normal;builduri=vstfs:///build/build/16577;informationnodeid=21100828;targetsnotlogged=getnativemanifest,getcopytooutputdirectoryitems,gettargetpath;tfsurl=http://tfs.safeautonet.net:8080/tfs/defaultcollection;"*workflowforwardinglogger,"d:\program files\microsoft team foundation server 2010\tools\microsoft.teamfoundation.build.server.logger.dll";"verbosity=normal;"</CmdLine>
+		<CmdLineItem>$([System.Text.RegularExpressions.Regex]::Match($(CmdLine), `"([^"]+)"|\s?(\w+?)\s`))</CmdLineItem>
+	</PropertyGroup>
+
+	<UsingTask TaskName="RegexString" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll" >
+		<ParameterGroup>
+			<Expression Required="true" />
+			<InputString ParameterType="System.String" Required="true" />
+			<Result ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+		</ParameterGroup>
+		<Task>
+			<Using Namespace="System.Text.RegularExpressions"/>
+			<Code Type="Fragment" Language="cs">
+				<![CDATA[
+      if (!String.IsNullOrEmpty(InputString))
+      {
+				MatchCollection matches = Regex.Matches(InputString, Expression);
+				if (matches.Count > 0)
+				{
+					Result = new TaskItem[matches.Count];
+					for (int i = 0; i < matches.Count; i++) 
+					{
+						Result[i] = new TaskItem(matches[i].Value);
+					}
+				}
+      }
+]]>
+			</Code>
+		</Task>
+	</UsingTask>
+	
+	<Target Name="TestBuild" DependsOnTargets="DlParse;FlpParse">
+		<RegexString Expression="&quot;([^&quot;]+)&quot;|\s?(\w+?)\s" InputString="$(CmdLine)">
+			<Output ItemName="Matches" TaskParameter="Result" />
+		</RegexString>
+		<Message Text="Matches: @(Matches)" Importance="High" />
+		<Message Text="Dl: $(DistributedLoggerCommandLine)" />
+		<Message Text="Flp: $(FileLoggerCommandLine)" />
+	</Target>
+
+	<Target Name="FlpParse">
+		<RegexString Expression="/flp:{1}([\w\s\\\&quot;\.\:\(\=\;])*" InputString="$(CmdLine)">
+			<Output TaskParameter="Result" PropertyName="FileLoggerCommandLine" />
+		</RegexString>
+		<!--
+		<Message Text="Flp: @(FlpMatches)" Importance="High" />
+		-->
+		<!--
+		<PropertyGroup>
+			<FileLoggerCommandLine>@(FlpMatches)</FileLoggerCommandLine>
+		</PropertyGroup>
+		-->
+	</Target>
+
+	<Target Name="DlParse">
+		<RegexString Expression="/dl:{1}([\w\s\\\&quot;\.\:\(\=\;\,\/\*])*" InputString="$(CmdLine)">
+			<Output TaskParameter="Result" PropertyName="DistributedLoggerCommandLine" />
+		</RegexString>
+		<!--
+		<Message Text="dl: @(DlMatches)" Importance="High" />
+		-->
+		<!--
+		<PropertyGroup>
+			<DistributedLoggerCommandLine>@(DlMatches)</DistributedLoggerCommandLine>
+		</PropertyGroup>
+		-->
+	</Target>
+	
+
+</Project>

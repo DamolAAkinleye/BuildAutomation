@@ -1,0 +1,201 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTarget="TestBuild" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<!--Inline Task Requires 4.0 Toolset version - Invoke MsBuild with /tv:4.0 -->
+	<UsingTask TaskName="ConvertToItemGroup" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll" >
+		<ParameterGroup>
+			<InputItems ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+			<Result ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+		</ParameterGroup>
+		<Task>
+			<Reference Include="$(MSBuildBinPath)\System.Xml.dll" />
+			<Reference Include="$(MsBuildBinPath)\Microsoft.Build.Framework.dll" />
+			<Reference Include="$(MsBuildBinPath)\Microsoft.Build.Utilities.v4.0.dll" />
+			<Using Namespace="Microsoft.Build.Framework" />
+			<Using Namespace="Microsoft.Build.Utilities" />
+			<Using Namespace="System.Xml"/>
+			<Code Type="Class" Language="cs">
+				<![CDATA[
+				/*
+				Custom Inline task to convert Xml to ItemGroup
+				Xml is expected to be in the following format:
+				<Application>
+					<PackageFolderName></PackageFolderName>
+					<Name></Name>
+					<Deployment>
+						<DeploymentType></DeploymentType>
+						<Servers>
+							<Server>
+								<Name></Name>
+								<SiteName></SiteName>
+								<InstallationPath></InstallationPath>
+								<Username></Username>
+								<Password></Password>
+								<KeePassGroup></KeePassGroup>
+								<KeePassTitle></KeePassTitle>
+							</Server>
+						</Servers>
+					</Deployment>
+				</Application>
+				*/
+				public class ConvertToItemGroup : Microsoft.Build.Utilities.Task
+				{
+					private Microsoft.Build.Framework.ITaskItem[] _inputItems;
+					private Microsoft.Build.Framework.ITaskItem[] _resultItems;
+					
+					[Microsoft.Build.Framework.Required]
+					public Microsoft.Build.Framework.ITaskItem[] InputItems 
+					{
+						get { return _inputItems; }
+						set { _inputItems = value; }
+					}
+					
+					[Microsoft.Build.Framework.Output]
+					public Microsoft.Build.Framework.ITaskItem[] Result
+					{
+						get { return _resultItems; }
+						set { _resultItems = value; }
+					}
+					
+					public override bool Execute() 
+					{
+			      if (InputItems.Length > 0)
+						{				
+							Result = new Microsoft.Build.Utilities.TaskItem[InputItems.Length];
+							for (int i = 0; i < InputItems.Length; i++) 
+							{
+								var doc = new System.Xml.XmlDocument();
+								doc.LoadXml(InputItems[i].ItemSpec);									
+								//Log.LogMessage(MessageImportance.Normal, "Parsed Xml - " + InputItems[i].ItemSpec);
+					
+								var name = doc.SelectSingleNode("//Application/Name");
+								if (name != null) 
+								{
+									var item = new Microsoft.Build.Utilities.TaskItem();
+									item.ItemSpec = name.InnerText;
+						
+									// DeploymentType
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/", "DeploymentType");
+									// Server Name
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "Name");
+									// Site Name (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "SiteName");
+									// Installation Path (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "InstallationPath");
+									// Username (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "Username");
+									// Password (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "Password");
+									// Service Name (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "ServiceName");
+									// KeePass Group (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "KeePassGroup");
+									// KeePass Title (optional)
+									AddMetaDataFromXmlElement(doc, item, "//Application/Deployment/Servers/Server/", "KeePassTitle");
+
+									Result[i] = item;
+								}					
+							}
+						}
+						return true;
+					}
+					
+					private void AddMetaDataFromXmlElement(System.Xml.XmlDocument doc, Microsoft.Build.Framework.ITaskItem item, string root, string key) 
+					{
+						var element = doc.SelectSingleNode(root + key);
+						if (element != null) 
+						{
+							item.SetMetadata(key, element.InnerText);
+						}	
+					}
+				}
+]]>
+			</Code>
+		</Task>
+	</UsingTask>
+	
+	<Target Name="TestBuild" Inputs="@PackageFolderNames" Outputs="@ConfigItem" BeforeTargets="ConvertConfigItems">
+		<PropertyGroup>
+			<PackageRoot>$(OutDir)_PublishedWebsites\*_Package</PackageRoot>
+			<DeploymentConfigFile Condition=" '$(DeploymentConfigFile)'=='' ">$(MSBuildProjectDirectory)\Deployment.Config</DeploymentConfigFile>
+		</PropertyGroup>
+		<ItemGroup>
+			<AllFiles Include="$(PackageRoot)\*"/>
+			<PackageFolderNames Include="@(AllFiles->DirectoryName())"/>
+		</ItemGroup>		
+
+		<XmlPeek XmlInputPath="$(DeploymentConfigFile)" Query="//Application[PackageFolderName='$([System.IO.Path]::GetFileName(&quot;%(PackageFolderNames.Identity)&quot;))']">
+			<Output TaskParameter="Result" ItemName="ConfigItem" />
+		</XmlPeek>
+	</Target>
+
+	<PropertyGroup>
+		<DeployApplicationsDependsOn>
+			TestBuild;
+			ConvertConfigItems;
+			GetKeePassCredentials;
+		</DeployApplicationsDependsOn>
+	</PropertyGroup>
+
+	<Target Name="ConvertConfigItems" AfterTargets="TestBuild" Inputs="@ConfigItem" Outputs="@ConvertedConfigItem">
+		<ConvertToItemGroup InputItems="@(ConfigItem)">
+			<Output ItemName="ConvertedConfigItem" TaskParameter="Result" />
+		</ConvertToItemGroup>
+		<Message Text="Converted ConfigItem's to ConvertedConfigItem's" />
+	</Target>
+
+	<Target Name="GetKeePassCredentials" AfterTargets="TestBuild" Outputs="%(ConvertedConfigItem.Identity)">
+		<PropertyGroup>
+			<KPScriptPath>"C:\Program Files (x86)\KeePass Password Safe 2\kpscript.exe"</KPScriptPath>
+			<KeePassDatabase>\\safeautonet\dfs\Configman\KeyPass\CMDatabase.kdbx</KeePassDatabase>
+			<KeePassKeyfile>\\safeautonet\dfs\Configman\KeyPass\CMDatabase.key</KeePassKeyfile>
+			<KeePassPassword>S@fe@uto</KeePassPassword>
+			<Itemid>%(ConvertedConfigItem.Identity)</Itemid>
+			<KPScriptCmdLine>-c:GetEntryString "$(KeePassDatabase)" -pw:"$(KeePassPassword)" -keyfile:"$(KeePassKeyfile)" -ref-Title:"%(ConvertedConfigItem.KeePassTitle)" -GroupName:"%(ConvertedConfigItem.KeePassGroup)"</KPScriptCmdLine>
+		</PropertyGroup>
+
+		<Exec Command="$(KPScriptPath) $(KPScriptCmdLine) -Field:UserName" ConsoleToMSBuild="true" Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''" StandardOutputImportance="Low" >
+			<Output TaskParameter="ConsoleOutput" PropertyName="_KeePassUsername" />
+		</Exec>
+
+		<Exec Command="$(KPScriptPath) $(KPScriptCmdLine) -Field:Password" ConsoleToMSBuild="true" Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''" StandardOutputImportance="Low" >
+			<Output TaskParameter="ConsoleOutput" PropertyName="_KeePassPassword" />
+		</Exec>
+
+		<PropertyGroup>
+			<_KeePassPassword Condition="'$(_KeePassPassword)' != ''">$(_KeePassPassword.Replace(";OK: Operation completed successfully.", ""))</_KeePassPassword>
+			<_KeePassUsername Condition="'$(_KeePassUsername)' != ''">$(_KeePassUsername.Replace(";OK: Operation completed successfully.", ""))</_KeePassUsername>
+		</PropertyGroup>
+		
+		<ItemGroup>
+			<ConvertedConfigItem Condition="'%(ConvertedConfigItem.KeePassTitle)'!='' And '%(ConvertedConfigItem.Identity)'=='$(Itemid)'">
+				<Username>$(_KeePassUsername)</Username>
+				<Password>$(_KeePassPassword)</Password>
+			</ConvertedConfigItem>
+		</ItemGroup>
+	</Target>
+	
+	<!--
+	<Target Name="DumpConfigItems" AfterTargets="ConvertConfigItems">
+		<Message Text="Web Applications:" />
+		<Message Text="%(ConvertedConfigItem.Identity) %(ConvertedConfigItem.InstallationPath)" Condition="'%(DeploymentType)'=='WebApplication'" />
+		<Message Text="Windows Service Applications:" />
+		<Message Text="%(ConvertedConfigItem.Identity) %(ConvertedConfigItem.KeePassGroup)" Condition="'%(DeploymentType)'=='WindowsServiceApplication'" />	
+	</Target>
+	-->
+	<Target Name="DeployApplications" DependsOnTargets="$(DeployApplicationsDependsOn)" AfterTargets="TestBuild" BeforeTargets="DeployWebApplications;DeployWindowsServiceApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		
+	</Target>
+
+	<Target Name="DeployWebApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<Message Text="Web Application:" Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication'" />
+		<Message Text="%(ConvertedConfigItem.Identity) %(ConvertedConfigItem.InstallationPath)  %(ConvertedConfigItem.Username) %(ConvertedConfigItem.Password)" Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication'" />
+	</Target>
+
+	<Target Name="DeployWindowsServiceApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<Message Text="Windows Service Application:"  Condition="'%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication'"/>
+		<Message Text="%(ConvertedConfigItem.Identity) %(ConvertedConfigItem.KeePassGroup) %(ConvertedConfigItem.Username) %(ConvertedConfigItem.Password)"  Condition="'%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication'"/>
+		
+	</Target>
+	
+</Project>
+

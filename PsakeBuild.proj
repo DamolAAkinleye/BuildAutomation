@@ -1,0 +1,214 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTarget="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask TaskName="TransformXml" AssemblyFile="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v10.0\Web\Microsoft.Web.Publishing.Tasks.dll"/>
+	<UsingTask TaskName="Microsoft.TeamFoundation.Build.Tasks.GetBuildProperties" AssemblyFile="D:\Program Files\Microsoft Team Foundation Server 2010\Tools\Microsoft.TeamFoundation.Build.ProcessComponents.dll" />
+	<UsingTask TaskName="Microsoft.TeamFoundation.Build.Tasks.BuildStep" AssemblyFile="D:\Program Files\Microsoft Team Foundation Server 2010\Tools\Microsoft.TeamFoundation.Build.ProcessComponents.dll" />
+
+	<!--Inline Task Requires 4.0 Toolset version - Invoke MsBuild with /tv:4.0 -->
+	<UsingTask TaskName="RegexString" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll" >
+		<ParameterGroup>
+			<Expression Required="true" />
+			<InputString ParameterType="System.String" Required="true" />
+			<Result ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+		</ParameterGroup>
+		<Task>
+			<Using Namespace="System.Text.RegularExpressions"/>
+			<Code Type="Fragment" Language="cs">
+				<![CDATA[
+      if (!String.IsNullOrEmpty(InputString))
+      {
+				MatchCollection matches = Regex.Matches(InputString, Expression);
+				if (matches.Count > 0)
+				{
+					Result = new TaskItem[matches.Count];
+					for (int i = 0; i < matches.Count; i++) 
+					{
+						Result[i] = new TaskItem(matches[i].Value);
+					}
+				}
+      }
+]]>
+			</Code>
+		</Task>
+	</UsingTask>
+
+	<!-- Parses the /flp: switch from the MsBuild Command Line into the FileLoggerCommandLine property -->
+	<Target Name="FlpParse" BeforeTargets="Build">
+		<RegexString Expression="/flp:{1}([\w\s\\\&quot;\.\:\(\=\;])*" InputString="$(CommandLine)">
+			<Output PropertyName="FileLoggerCommandLine" TaskParameter="Result" />
+		</RegexString>
+		<Message Text="Parsing File Logger Parameters from command line..." />
+	</Target>
+
+	<!-- Parses the /dl: switch from the MsBuild Command Line into the DistributedLoggerCommandLine property -->
+	<Target Name="DlParse" BeforeTargets="Build">
+		<RegexString Expression="/dl:{1}([\w\s\\\&quot;\.\:\(\=\;\,\/\*])*" InputString="$(CommandLine)">
+			<Output PropertyName="DistributedLoggerCommandLine" TaskParameter="Result" />
+		</RegexString>
+		<Message Text="Parsing Distributed Logger Parameters from command line..." />
+	</Target>
+	
+	<PropertyGroup>
+		<Configuration Condition=" '$(Configuration)'=='' ">Debug</Configuration>
+		<Verbosity Condition=" '$(Verbosity)'=='' ">Normal</Verbosity>
+		<ProjectsToBuild Condition=" '$(ProjectsToBuild)'=='' ">$(MSBuildProjectDirectory)\*.sln</ProjectsToBuild>
+		<DeploymentConfigFile Condition=" '$(DeploymentConfigFile)'=='' ">$(MSBuildProjectDirectory)\Deployment.Config</DeploymentConfigFile>
+	</PropertyGroup>
+	
+	<PropertyGroup>
+		<__PsInvokeCommand>powershell -NoProfile -ExecutionPolicy unrestricted "Invoke-Command</__PsInvokeCommand>
+		<__BlockBegin>-ScriptBlock { $errorActionPreference='Stop';</__BlockBegin>
+		<__BlockEnd>; exit $LASTEXITCODE }</__BlockEnd>
+		<_PsCmdStart>$(__PsInvokeCommand) $(__BlockBegin)</_PsCmdStart>
+		<_PsCmdEnd>$(__BlockEnd)"</_PsCmdEnd>
+	</PropertyGroup>
+
+	<Target Name="DumpTFSProperties" Condition="'$(TeamFoundationServerUrl)'!='' " BeforeTargets="DumpGetBuildPropertyValues">	
+		<GetBuildProperties TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+		 BuildUri="$(BuildUri)">
+			<Output TaskParameter="BuildAgentName" PropertyName="BuildAgentName" />
+			<Output TaskParameter="BuildAgentUri" PropertyName="BuildAgentUri" />
+			<Output TaskParameter="BuildDirectory" PropertyName="BuildDirectory" />
+			<Output TaskParameter="BuildDefinitionName" PropertyName="BuildDefinitionName" />
+			<Output TaskParameter="BuildDefinitionUri" PropertyName="BuildDefinitionUri" />
+			<Output TaskParameter="BuildNumber" PropertyName="BuildNumber" />
+			<Output TaskParameter="CompilationStatus" PropertyName="CompilationStatus" />
+			<Output TaskParameter="CompilationSuccess" PropertyName="CompilationSuccess" />
+			<Output TaskParameter="ConfigurationFolderUri" PropertyName="ConfigurationFolderUri" />
+			<Output TaskParameter="DropLocation" PropertyName="DropLocation" />
+			<Output TaskParameter="LabelName" PropertyName="FullLabelName" />
+			<Output TaskParameter="LastChangedBy" PropertyName="LastChangedBy" />
+			<Output TaskParameter="LastChangedOn" PropertyName="LastChangedOn" />
+			<Output TaskParameter="LogLocation" PropertyName="LogLocation" />
+			<Output TaskParameter="MachineName" PropertyName="MachineName" />
+			<Output TaskParameter="MaxProcesses" PropertyName="MaxProcesses" />
+			<Output TaskParameter="Port" PropertyName="Port" />
+			<Output TaskParameter="Quality" PropertyName="Quality" />
+			<Output TaskParameter="Reason" PropertyName="Reason" />
+			<Output TaskParameter="RequestedBy" PropertyName="RequestedBy" />
+			<Output TaskParameter="RequestedFor" PropertyName="RequestedFor" />
+			<Output TaskParameter="SourceGetVersion" PropertyName="SourceGetVersion" />
+			<Output TaskParameter="StartTime" PropertyName="StartTime" />
+			<Output TaskParameter="Status" PropertyName="Status" />
+			<Output TaskParameter="TeamProject" PropertyName="TeamProject" />
+			<Output TaskParameter="TestStatus" PropertyName="TestStatus" />
+			<Output TaskParameter="TestSuccess" PropertyName="TestSuccess" />
+		</GetBuildProperties>
+		<Message Text="Invoking GetBuildProperties to populate Build Properties..." />
+	</Target>
+
+	<PropertyGroup>
+		<CommandLine>$([System.Environment]::CommandLine.Trim())</CommandLine>
+	</PropertyGroup>
+	
+	<Target Name="DumpGetBuildPropertyValues" AfterTargets="DumpGetBuildPropertyValues" BeforeTargets="Build">
+		<Message Text="Command line: $(CommandLine)" />
+	
+		<Message Text="BuildAgentName=$(BuildAgentName)" />
+		<Message Text="BuildAgentUri=$(BuildAgentUri)" />
+		<Message Text="BuildDirectory=$(BuildDirectory)" />
+		<Message Text="BuildDefinitionName=$(BuildDefinitionName)" />
+		<Message Text="BuildDefinitionUri=$(BuildDefinitionUri)" />
+		<Message Text="BuildNumber=$(BuildNumber)" />
+		<Message Text="CompilationStatus=$(CompilationStatus)" />
+		<Message Text="CompilationSuccess=$(CompilationSuccess)" />
+		<Message Text="ConfigurationFolderUri=$(ConfigurationFolderUri)" />
+		<Message Text="DropLocation=$(DropLocation)" />
+		<Message Text="LabelName=$(FullLabelName)" />
+		<Message Text="LastChangedBy=$(LastChangedBy)" />
+		<Message Text="LastChangedOn=$(LastChangedOn)" />
+		<Message Text="LogLocation=$(LogLocation)" />
+		<Message Text="MachineName=$(MachineName)" />
+		<Message Text="MaxProcesses=$(MaxProcesses)" />
+		<Message Text="Port=$(Port)" />
+		<Message Text="Quality=$(Quality)" />
+		<Message Text="Reason=$(Reason)" />
+		<Message Text="RequestedBy=$(RequestedBy)" />
+		<Message Text="RequestedFor=$(RequestedFor)" />
+		<Message Text="SourceGetVersion=$(SourceGetVersion)" />
+		<Message Text="StartTime=$(StartTime)" />
+		<Message Text="Status=$(Status)" />
+		<Message Text="TeamProject=$(TeamProject)" />
+		<Message Text="TestStatus=$(TestStatus)" />
+		<Message Text="TestSuccess=$(TestSuccess)" />		
+	</Target>
+
+	<Target Name="InitializePSakeVariables" BeforeTargets="Build">
+		<PropertyGroup>
+			<PSakeTask Condition=" '$(PSakeTask)'=='' ">CIBuild</PSakeTask>
+			<PSakeModulePath Condition=" '$(PSakeModulePath)'=='' ">e:\psake\psake-master\psake.psm1</PSakeModulePath>
+			<PSakeConfiguration Condition=" '$(Configuration)'!='' ">Configuration='$(Configuration)'</PSakeConfiguration>
+			<PSakePlatform Condition=" '$(Platform)'!='' ">Platform='$(Platform)'</PSakePlatform>
+			<PSakeProjectsToBuild Condition=" '$(ProjectsToBuild)'!='' ">ProjectsToBuild='$(ProjectsToBuild)'</PSakeProjectsToBuild>
+			<PSakeVerbosity Condition=" '$Verbosity'!='' ">Verbosity='/v:$(Verbosity)'</PSakeVerbosity>
+			<PSakeOutDir Condition=" '$(OutDir)'!='' ">OutDir='$(OutDir)'</PSakeOutDir>
+			<PSakeDestinationManifestRootPath Condition=" '$(DestinationManifestRootPath)'!='' ">DestManifest='$(DestinationManifestRootPath)'</PSakeDestinationManifestRootPath>
+			<PSakeFileLogger Condition=" '$(FileLoggerCommandLine)'!='' ">FileLogger='$(FileLoggerCommandLine)'</PSakeFileLogger>
+			<PSakeDistributedLogger Condition=" '$(DistributedLoggerCommandLine)'!='' ">DistributedLogger='$(DistributedLoggerCommandLine)'</PSakeDistributedLogger>
+			<PSakeTfsServerUrl Condition=" '$(TeamFoundationServerUrl)'!='' ">TFSServerUrl='$(TeamFoundationServerUrl)'</PSakeTfsServerUrl>
+			<PSakeBuildUri Condition=" '$(BuildUri)'!='' ">BuildUri='$(BuildUri)'</PSakeBuildUri>
+			<PSakeTeamProject Condition=" '$(TeamProject)'!='' ">TeamProject='$(TeamProject)'</PSakeTeamProject>
+			<PSakeParameters>$(PSakeConfiguration); $(PSakePlatform); $(PSakeProjectsToBuild); $(PSakeVerbosity); $(PSakeOutDir); $(PSakeTfsServerUrl); $(PSakeBuildUri); $(PSakeTeamProject); $(PSakeDestinationManifestRootPath)</PSakeParameters>
+			<PSakeBuildFile Condition=" '$(PSakeBuildFile)'=='' ">'$(MSBuildProjectDirectory)\psake-build.ps1'</PSakeBuildFile>
+			<PSakeCommandLine>Import-Module $(PSakeModulePath); Invoke-Psake -buildFile $(PSakeBuildFile) -task $(PSakeTask) -properties @{$(PSakeParameters)}</PSakeCommandLine>
+		</PropertyGroup>
+	</Target>
+
+	<Target Name="Build" AfterTargets="DlParse;FlpParse;DumpTFSProperties;DumpGetBuildPropertyValues;InitializePSakeVariables;TransformAndMoveDeploymentConfig">
+		<BuildStep Condition="$(BuildUri)!=''"	 
+				   BuildUri="$(BuildUri)" 
+				   Name="PowerShell Build Step"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)" 
+				   Message="PowerShell - PSake Task $(PSakeTask)">  
+			<Output TaskParameter="Id" PropertyName="StepId" /> 
+		</BuildStep> 
+
+		<Message Text="Invoking Psake to build $(ProjectsToBuild)" />
+		<Message Text="$(PSakeCommandLine)" />
+
+		<!-- This is a Hack to get the PowerShell Output to TFS Build -->
+		<!--<PropertyGroup>
+			<PSOutputFile>$(OutDir)\PSakeOutput.txt</PSOutputFile>
+		</PropertyGroup>-->
+		<Exec Command="$(_PsCmdStart)$(PSakeCommandLine)$(_PsCmdEnd)" />
+		<!--<ReadLinesFromFile File="$(PSOutputFile)">
+			<Output TaskParameter="Lines" ItemName="OutputLines" />
+		</ReadLinesFromFile>
+		<PropertyGroup>
+			<OutputOfExec>@(OutputLines->'%(Identity)', '%0a%0d')</OutputOfExec>
+		</PropertyGroup>-->
+		<BuildStep Condition="$(BuildUri)!=''"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)" 
+				   Id="$(StepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkDeployStepAsFailed" />
+	</Target>
+
+	<Target Name="MarkDeployStepAsFailed">
+		<BuildStep
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(StepId)"
+				Status="Failed" />
+	</Target>
+
+	<Target Name="TransformAndMoveDeploymentConfig" Condition="'$(PSakeTask)'=='DeploymentBuild' " BeforeTargets="Build">
+		<Message Text="Transforming: $(DeploymentConfigFile)" />
+
+		<PropertyGroup>
+			<DeploymentConfigTransformFile>$(MSBuildProjectDirectory)\Deployment.$(Configuration).Config</DeploymentConfigTransformFile>
+		</PropertyGroup>
+
+		<Message Text="DeploymentConfigTransformFile property is set to $(DeploymentConfigTransformFile)" />
+
+		<!-- Transform Deployment Config file if transformation file exists -->
+		<TransformXml Condition="Exists($(DeploymentConfigTransformFile))" Source="$(DeploymentConfigFile)"
+									Transform="$(DeploymentConfigTransformFile)"
+									Destination="$(OutDir)\Deployment.Config" />
+		
+		<!-- Move file if no transform file found -->
+		<Copy Condition="!Exists($(DeploymentConfigTransformFile))" SourceFiles="$(DeploymentConfigFile)" DestinationFiles="$(OutDir)\Deployment.Config" />
+	</Target>	
+</Project>
+
