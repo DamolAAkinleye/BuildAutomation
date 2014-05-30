@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	<xs:element name="Applications">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element maxOccurs="unbounded" name="Application">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="PackageFolderName" type="xs:string" />
+							<xs:element name="Name" type="xs:string" />
+							<xs:element name="Deployment">
+								<xs:complexType>
+									<xs:sequence>
+										<xs:element name="DeploymentType">
+											<xs:simpleType>
+												<xs:restriction base="xs:string">
+													<xs:enumeration value="WebApplication" />
+													<xs:enumeration value="WindowsServiceApplication" />
+													<xs:enumeration value="ConsoleApplication" />
+													<xs:enumeration value="NServiceBusWindowsServiceApplication" />
+													<xs:enumeration value="Skip" />
+												</xs:restriction>
+											</xs:simpleType>
+										</xs:element>
+										<xs:element name="Servers">
+											<xs:complexType>
+												<xs:sequence>
+													<xs:element name="Server">
+														<xs:complexType>
+															<xs:sequence>
+																<xs:element name="Name" type="xs:string" />
+																<xs:element minOccurs="0" name="ServiceName" type="xs:string" />
+																<xs:element minOccurs="0" name="KeePassGroup" type="xs:string" />
+																<xs:element minOccurs="0" name="KeePassTitle" type="xs:string" />
+																<xs:element minOccurs="0" name="SiteName" type="xs:string" />
+																<xs:element minOccurs="0" name="InstallationPath" type="xs:string" />
+																<xs:element minOccurs="0" name="Username" type="xs:string" />
+																<xs:element minOccurs="0" name="Password" type="xs:string" />
+																<xs:element minOccurs="0" name="GWUserKeePassGroup" type="xs:string" />
+																<xs:element minOccurs="0" name="GWUserKeePassTitle" type="xs:string" />
+																<xs:element minOccurs="0" name="ServiceStartUp">
+																	<xs:simpleType>
+																		<xs:restriction base="xs:string">
+																			<xs:enumeration value="Automatic" />
+																			<xs:enumeration value="Manual" />
+																		</xs:restriction>
+																	</xs:simpleType>
+																</xs:element>
+															</xs:sequence>
+														</xs:complexType>
+													</xs:element>
+												</xs:sequence>
+											</xs:complexType>
+										</xs:element>
+									</xs:sequence>
+								</xs:complexType>
+							</xs:element>
+						</xs:sequence>
+					</xs:complexType>
+				</xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+</xs:schema>

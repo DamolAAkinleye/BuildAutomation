@@ -1,0 +1,588 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTarget="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask TaskName="TransformXml" AssemblyFile="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v10.0\Web\Microsoft.Web.Publishing.Tasks.dll"/>
+	<UsingTask TaskName="Microsoft.TeamFoundation.Build.Tasks.GetBuildProperties" AssemblyFile="D:\Program Files\Microsoft Team Foundation Server 2010\Tools\Microsoft.TeamFoundation.Build.ProcessComponents.dll" />
+	<UsingTask TaskName="Microsoft.TeamFoundation.Build.Tasks.BuildStep" AssemblyFile="D:\Program Files\Microsoft Team Foundation Server 2010\Tools\Microsoft.TeamFoundation.Build.ProcessComponents.dll" />
+	
+	<!--Inline Task Requires 4.0 Toolset version - Invoke MsBuild with /tv:4.0 -->
+	<UsingTask TaskName="ConvertToItemGroup" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll" >
+		<ParameterGroup>
+			<InputItems ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+			<Result ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+		</ParameterGroup>
+		<Task>
+			<Reference Include="$(MSBuildBinPath)\System.Xml.dll" />
+			<Reference Include="$(MsBuildBinPath)\Microsoft.Build.Framework.dll" />
+			<Reference Include="$(MsBuildBinPath)\Microsoft.Build.Utilities.v4.0.dll" />
+			<Using Namespace="Microsoft.Build.Framework" />
+			<Using Namespace="Microsoft.Build.Utilities" />
+			<Using Namespace="System.Collections.Generic"/>
+			<Using Namespace="System.Xml"/>
+			<Code Type="Class" Language="cs">
+				<![CDATA[
+				/*
+				Custom Inline task to convert Xml to ItemGroup
+				Xml is expected to be in the following format:
+				<Application>
+					<PackageFolderName></PackageFolderName>
+					<Name></Name>
+					<Deployment>
+						<DeploymentType></DeploymentType>
+						<Servers>
+							<Server>
+								<Name></Name>
+								<SiteName></SiteName>
+								<InstallationPath></InstallationPath>
+								<Username></Username>
+								<Password></Password>
+								<KeePassGroup></KeePassGroup>
+								<KeePassTitle></KeePassTitle>
+								<GWUserKeePassGroup></GWUserKeePassGroup>
+								<GWUserKeePassTitle></GWUserKeePassTitle>
+								<ServiceStartUp></ServiceStartUp>
+							</Server>
+							<Server>
+							...
+							</Server>
+						</Servers>
+					</Deployment>
+				</Application>
+				*/
+				public class ConvertToItemGroup : Microsoft.Build.Utilities.Task
+				{
+					private Microsoft.Build.Framework.ITaskItem[] _inputItems;
+					private Microsoft.Build.Framework.ITaskItem[] _resultItems;
+					
+					[Microsoft.Build.Framework.Required]
+					public Microsoft.Build.Framework.ITaskItem[] InputItems 
+					{
+						get { return _inputItems; }
+						set { _inputItems = value; }
+					}
+					
+					[Microsoft.Build.Framework.Output]
+					public Microsoft.Build.Framework.ITaskItem[] Result
+					{
+						get { return _resultItems; }
+						set { _resultItems = value; }
+					}
+					
+					public override bool Execute() 
+					{
+						if (InputItems.Length > 0)
+						{				
+							var result = new System.Collections.Generic.List<Microsoft.Build.Utilities.TaskItem>();
+							for (int i = 0; i < InputItems.Length; i++) 
+							{
+								var doc = new System.Xml.XmlDocument();
+								doc.LoadXml(InputItems[i].ItemSpec);									
+								//Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal, "Parsed Xml - " + InputItems[i].ItemSpec);
+					
+								var name = doc.SelectSingleNode("//Application/Name");
+								if (name != null) 
+								{
+									var deploymentType = GetElementInnerText(doc, "//Application/Deployment/DeploymentType");
+								
+									var serverNodes = doc.SelectNodes("//Application/Deployment/Servers/Server");
+									
+									foreach(System.Xml.XmlNode node in serverNodes) 
+									{
+										//Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal, node.InnerXml);
+										var item = new Microsoft.Build.Utilities.TaskItem();
+										
+										var serverName = node.SelectSingleNode("Name");
+										var siteName = node.SelectSingleNode("SiteName");
+										var installationPath = node.SelectSingleNode("InstallationPath");
+										var userName = node.SelectSingleNode("Username");
+										var password = node.SelectSingleNode("Password");
+										var serviceName = node.SelectSingleNode("ServiceName");
+										var keePassGroup = node.SelectSingleNode("KeePassGroup");
+										var keePassTitle = node.SelectSingleNode("KeePassTitle");
+										var gwUserKeePassGroup = node.SelectSingleNode("GWUserKeePassGroup");
+										var gwUserKeePassTitle = node.SelectSingleNode("GWUserKeePassTitle");
+										var serviceStartUp = node.SelectSingleNode("ServiceStartUp");
+
+										item.ItemSpec = System.Guid.NewGuid().ToString();
+
+										// Application Name
+										item.SetMetadata("Name", name.InnerText);
+										// DeploymentType
+										item.SetMetadata("DeploymentType", deploymentType);
+										// Server Name
+										item.SetMetadata("ServerName", serverName.InnerText);										
+										// Site Name (optional)
+										item.SetMetadata("SiteName", siteName != null ? siteName.InnerText : string.Empty);
+										// Installation Path (optional)
+										item.SetMetadata("InstallationPath", installationPath != null ? installationPath.InnerText : string.Empty);
+										// Username (optional)
+										item.SetMetadata("Username", userName != null ? userName.InnerText : string.Empty);
+										// Password (optional)
+										item.SetMetadata("Password", password != null ? password.InnerText : string.Empty);
+										// Service Name (optional)
+										item.SetMetadata("ServiceName", serviceName != null ? serviceName.InnerText : string.Empty);										
+										// KeePass Group (optional)
+										item.SetMetadata("KeePassGroup", keePassGroup != null ? keePassGroup.InnerText : string.Empty);
+										// KeePass Title (optional)
+										item.SetMetadata("KeePassTitle", keePassTitle != null ? keePassTitle.InnerText : string.Empty);
+										// GuideWire User KeePass Group (optional)
+										item.SetMetadata("GWUserKeePassGroup", gwUserKeePassGroup != null ? gwUserKeePassGroup.InnerText : string.Empty);
+										// GuideWire User KeePass Title (optional)
+										item.SetMetadata("GWUserKeePassTitle", gwUserKeePassTitle != null ? gwUserKeePassTitle.InnerText : string.Empty);
+										// Service Start Up (optional)
+										item.SetMetadata("ServiceStartUp", serviceStartUp != null ? serviceStartUp.InnerText : string.Empty);
+										
+										//Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal, installationPath != null ? "Installation Path is - " + installationPath.InnerText : string.Empty);
+										
+										result.Add(item);
+									}
+								}					
+							}
+							Result = result.ToArray();
+						}
+						return true;
+					}
+					
+					private string GetElementInnerText(System.Xml.XmlDocument doc, string key)
+					{
+						var element = doc.SelectSingleNode(key);
+						if (element == null) { return string.Empty; }
+						return element.InnerText;
+					}
+				}
+]]>
+			</Code>
+		</Task>
+	</UsingTask>
+		
+	<PropertyGroup>
+		<Configuration Condition=" '$(Configuration)'=='' ">Debug</Configuration>
+		<Verbosity Condition=" '$(Verbosity)'=='' ">Normal</Verbosity>
+		<ProjectsToBuild Condition=" '$(ProjectsToBuild)'=='' ">$(MSBuildProjectDirectory)\*.sln</ProjectsToBuild>
+		<DeploymentConfigFile Condition=" '$(DeploymentConfigFile)'=='' ">$(MSBuildProjectDirectory)\Deployment.Config</DeploymentConfigFile>
+		<MsTestSettingsFile Condition="'$(MsTestSettingsFile)' == ''"></MsTestSettingsFile>
+		<IncludeSetAclProviderOnDestination Condition="'$(IncludeSetAclProviderOnDestination)' == ''">False</IncludeSetAclProviderOnDestination>
+		<PSDotNetDeploymentModulePath Condition="'$(PSDotNetDeploymentModulePath)' == ''">'$(MSBuildProjectDirectory)\DotNetDeployment.psm1'</PSDotNetDeploymentModulePath>
+	</PropertyGroup>
+	
+	<!-- PowerShell Command Line properties -->
+	<PropertyGroup>
+		<__PsInvokeCommand>powershell -NoProfile -ExecutionPolicy unrestricted "Invoke-Command</__PsInvokeCommand>
+		<__BlockBegin>-ScriptBlock { $errorActionPreference='Stop';</__BlockBegin>
+		<__BlockEnd>; exit $LASTEXITCODE }</__BlockEnd>
+		<_PsCmdStart>$(__PsInvokeCommand) $(__BlockBegin)</_PsCmdStart>
+		<_PsCmdEnd>$(__BlockEnd)"</_PsCmdEnd>
+	</PropertyGroup>
+		
+	<Target Name="ParseProjectsToBuild" Condition=" '$(ProjectsToBuild)'!='' " BeforeTargets="Build">
+		<ItemGroup>
+			<_ProjectsToBuild Include="$(ProjectsToBuild.Split(';'))"></_ProjectsToBuild>
+		</ItemGroup>
+		<Message Text="Parsed project for build - %(_ProjectsToBuild.Identity)" />
+	</Target>
+	
+	<!-- Build Target -->
+	<Target Name="Build" AfterTargets="ParseProjectsToBuild" BeforeTargets="UnitTest" Outputs="%(_ProjectsToBuild.Identity)">
+		<BuildStep Condition="$(BuildUri)!=''"	 
+				   BuildUri="$(BuildUri)" 
+				   Name="Invoke MSBuild"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)" 
+				   Message="Building Project %(_ProjectsToBuild.Identity)">  
+			<Output TaskParameter="Id" PropertyName="StepId" /> 
+		</BuildStep> 
+
+		<Message Text="Building %(_ProjectsToBuild.Identity)" Importance="High" />
+		<MSBuild Projects="%(_ProjectsToBuild.Identity)" 
+						 Properties="Platform=$(Platform);
+						 Configuration=$(Configuration);
+						 OutDir=$(OutDir);
+						 DeployOnBuild=true;
+						 DeployTarget=Package;
+						 IncludeSetAclProviderOnDestination=$(IncludeSetAclProviderOnDestination)" />
+
+		<BuildStep Condition="$(BuildUri)!=''"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)" 
+				   Id="$(StepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkBuildStepAsFailed" />
+	</Target>
+
+	<!-- Build Failure Target -->
+	<Target Name="MarkBuildStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(StepId)"
+				Status="Failed" />
+	</Target>
+
+	<Target Name="GetTFSProperties" Condition="'$(TeamFoundationServerUrl)'!='' " BeforeTargets="UnitTest" AfterTargets="Build">	
+		<GetBuildProperties TeamFoundationServerUrl="$(TeamFoundationServerUrl)" BuildUri="$(BuildUri)">
+			<Output TaskParameter="TeamProject" PropertyName="TeamProject" />
+		</GetBuildProperties>
+	</Target>
+	
+	<!-- Identifies Unit Test Assemblies -->
+	<Target Name="IdentifyTestContainers" BeforeTargets="UnitTest" AfterTargets="Build">
+		<PropertyGroup>
+			<TestAssemblyFileSpec Condition="'$(TestAssemblyFileSpec)' == ''">**\*.tests.dll</TestAssemblyFileSpec>
+		</PropertyGroup>
+		<Message Text="$(OutDir)$(TestAssemblyFileSpec)" Importance="High" />
+		<ItemGroup>
+			<TestContainers Include="$(OutDir)$(TestAssemblyFileSpec)" />
+		</ItemGroup>
+	</Target>
+	
+	<!-- Executes Unit Tests -->
+	<Target Name="UnitTest" AfterTargets="Build;GetTFSProperties;IdentifyTestContainers">
+		<BuildStep Condition="$(BuildUri)!=''"
+				   BuildUri="$(BuildUri)"
+				   Name="Executing Unit Tests"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   Message="Invoking MsTest for Unit Test Assemblies">
+			<Output TaskParameter="Id" PropertyName="UnitTestStepId" />
+		</BuildStep>
+
+		<PropertyGroup>
+			<_MsTestPath Condition="'$(MsTestPath)' == ''">C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\IDE\MSTest.exe</_MsTestPath>
+			<_MsTestContainers>@(TestContainers->' /testcontainer:"%(FullPath)"', ' ')</_MsTestContainers>
+			<_MsTestResultsFile>/resultsfile:"$(OutDir)UnitTestResults.trx"</_MsTestResultsFile>
+			<_MsTestFullPathTestSettingsFile Condition="'$(MsTestSettingsFile)' != ''">$([System.IO.Path]::GetFullPath('$(MsTestSettingsFile)'))</_MsTestFullPathTestSettingsFile>
+			<_MsTestSettings Condition="'$(_MsTestFullPathTestSettingsFile)' != ''">/testsettings:"$(_MsTestFullPathTestSettingsFile)"</_MsTestSettings>
+			<_MsTestDetail>/detail:errormessage</_MsTestDetail>
+			<_MsTestPublish Condition="'$(TeamFoundationServerUrl)' != ''"> /platform:"$(Platform)" /flavor:"$(Configuration)" /publish:"$(TeamFoundationServerUrl)" /publishbuild:"$(BuildUri)" /teamproject:"$(TeamProject)"</_MsTestPublish>
+			<MsTestCommandLine>"$(_MsTestPath)" $(_MsTestDetail) $(_MsTestResultsFile) $(_MsTestContainers) $(_MsTestPublish) $(_MsTestSettings)</MsTestCommandLine>
+		</PropertyGroup>
+
+		<Exec Command="$(MsTestCommandLine)" />
+
+		<BuildStep Condition="$(BuildUri)!=''"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)"
+				   Id="$(UnitTestStepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkUnitTestStepAsFailed" />
+	</Target>
+
+	<!-- Unit Test Execution Failure -->
+	<Target Name="MarkUnitTestStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(UnitTestStepId)"
+				Status="Failed" />
+	</Target>	
+	
+	<Target Name="TransformAndMoveDeploymentConfig" Condition="'$(PSakeTask)'=='DeploymentBuild' " BeforeTargets="Build">
+		<Message Text="Transforming: $(DeploymentConfigFile)" />
+
+		<PropertyGroup>
+			<DeploymentConfigTransformFile>$(MSBuildProjectDirectory)\Deployment.$(Configuration).Config</DeploymentConfigTransformFile>
+		</PropertyGroup>
+
+		<Message Text="DeploymentConfigTransformFile property is set to $(DeploymentConfigTransformFile)" />
+
+		<!-- Transform Deployment Config file if transformation file exists -->
+		<TransformXml Condition="Exists($(DeploymentConfigTransformFile))" Source="$(DeploymentConfigFile)"
+									Transform="$(DeploymentConfigTransformFile)"
+									Destination="$(OutDir)\Deployment.Config" />
+		
+		<!-- Move file if no transform file found -->
+		<Copy Condition="!Exists($(DeploymentConfigTransformFile))" SourceFiles="$(DeploymentConfigFile)" DestinationFiles="$(OutDir)\Deployment.Config" />
+	</Target>	
+
+	<PropertyGroup>
+		<DeployApplicationsDependsOn>
+			Build;
+			UnitTest;
+			GetDeploymentItems;
+			ConvertConfigItems;
+			CheckForDeploymentsToSkip;
+		</DeployApplicationsDependsOn>
+	</PropertyGroup>
+	
+	<!-- Enumerates all of the "_package" folders to find the applications to deploy and looks up configuration information for each -->
+	<Target Name="GetDeploymentItems" Inputs="@PackageFolderNames" Outputs="@ConfigItem" BeforeTargets="ConvertConfigItems">
+		<PropertyGroup>
+			<PackageRoot>$(OutDir)_PublishedWebsites\*_Package</PackageRoot>
+			<DeploymentConfigFile Condition=" '$(DeploymentConfigFile)'=='' ">$(MSBuildProjectDirectory)\Deployment.Config</DeploymentConfigFile>
+		</PropertyGroup>
+		<ItemGroup>
+			<AllFiles Include="$(PackageRoot)\*"/>
+			<PackageFolderNames Include="@(AllFiles->DirectoryName())"/>
+		</ItemGroup>
+
+		<!--<Message Text="//Application[PackageFolderName='$([System.IO.Path]::GetFileName(&quot;%(PackageFolderNames.Identity)&quot;))']" />-->
+
+		<XmlPeek XmlInputPath="$(DeploymentConfigFile)" Query="//Application[PackageFolderName='$([System.IO.Path]::GetFileName(&quot;%(PackageFolderNames.Identity)&quot;))']">
+			<Output TaskParameter="Result" ItemName="ConfigItem" />
+		</XmlPeek>
+	</Target>
+
+	<Target Name="ConvertConfigItems" AfterTargets="GetDeploymentItems" Inputs="@ConfigItem" Outputs="@ConvertedConfigItem">
+		<ConvertToItemGroup InputItems="@(ConfigItem)">
+			<Output ItemName="ConvertedConfigItem" TaskParameter="Result" />
+		</ConvertToItemGroup>
+		<Message Text="Converted ConfigItem's to ConvertedConfigItem's" />
+		<!--<Message Text="@(ConvertedConfigItem->'%(Identity) - %(Name) - %(InstallationPath)')" />-->
+	</Target>
+
+	<!-- Check for deployments where there were no changes and therefore nothing to deploy -->
+	<Target Name="CheckForDeploymentsToSkip" AfterTargets="GetDeploymentItems" BeforeTargets="CheckForWebDeploymentsToSkip;CheckForDotNetDeploymentsToSkip">
+	</Target>
+
+	<Target Name="CheckForWebDeploymentsToSkip" AfterTargets="CheckForDeploymentsToSkip" Outputs="%(ConvertedConfigItem.Identity)">
+		<PropertyGroup>
+			<CheckForWebDeploymentsToSkipItemid>%(ConvertedConfigItem.Identity)</CheckForWebDeploymentsToSkipItemid>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSUserCredentials Condition="'%(ConvertedConfigItem.Username)'!=''">-userName '%(ConvertedConfigItem.Username)' -password '%(ConvertedConfigItem.Password)'</PSUserCredentials>
+			<PSKeePassCredentials Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''">-keePassGroup '%(ConvertedConfigItem.KeePassGroup)' -keePassTitle '%(ConvertedConfigItem.KeePassTitle)'</PSKeePassCredentials>
+			<PSCheckForWebDeploymentsToSkipCredentials Condition="'$(PSUserCredentials)' != ''">$(PSUserCredentials)</PSCheckForWebDeploymentsToSkipCredentials>
+			<PSCheckForWebDeploymentsToSkipCredentials Condition="'$(PSUserCredentials)' == ''">$(PSKeePassCredentials)</PSCheckForWebDeploymentsToSkipCredentials>
+			<PSShouldDeployDotNetWebApplicationCommandLine>Import-Module $(PSDotNetDeploymentModulePath); ShouldDeployDotNetWebApplication '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)' '%(ConvertedConfigItem.SiteName)' '%(ConvertedConfigItem.InstallationPath)' $(PSCheckForWebDeploymentsToSkipCredentials)</PSShouldDeployDotNetWebApplicationCommandLine>
+		</PropertyGroup>
+
+		<Message Text="Checking if Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName) at %(ConvertedConfigItem.InstallationPath) is necessary..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSShouldDeployDotNetWebApplicationCommandLine)$(_PsCmdEnd)" ConsoleToMSBuild="true" Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication'">
+			<Output TaskParameter="ConsoleOutput" PropertyName="_ShouldDeployApp" />
+		</Exec>
+
+		<ItemGroup>
+			<ConvertedConfigItem Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.Identity)'=='$(CheckForWebDeploymentsToSkipItemid)'">
+				<ShouldDeployApp>$(_ShouldDeployApp)</ShouldDeployApp>
+			</ConvertedConfigItem>
+		</ItemGroup>
+	</Target>
+
+	<Target Name="CheckForDotNetDeploymentsToSkip" AfterTargets="CheckForDeploymentsToSkip" Outputs="%(ConvertedConfigItem.Identity)">
+		<PropertyGroup>
+			<CheckForDeploymentsToSkipItemid>%(ConvertedConfigItem.Identity)</CheckForDeploymentsToSkipItemid>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSShouldDeployDotNetApplicationCommandLine>Import-Module $(PSDotNetDeploymentModulePath); ShouldDeployDotNetApplication '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)'</PSShouldDeployDotNetApplicationCommandLine>
+		</PropertyGroup>
+
+		<Message Text="Checking if Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName) is necessary..." Condition="'%(ConvertedConfigItem.DeploymentType)'!='WebApplication' And '%(ConvertedConfigItem.DeploymentType)'!='Skip'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSShouldDeployDotNetApplicationCommandLine)$(_PsCmdEnd)" ConsoleToMSBuild="true" Condition="'%(ConvertedConfigItem.DeploymentType)'!='WebApplication' And '%(ConvertedConfigItem.DeploymentType)'!='Skip'">
+			<Output TaskParameter="ConsoleOutput" PropertyName="_ShouldDeployApp" />
+		</Exec>
+
+		<ItemGroup>
+			<ConvertedConfigItem Condition="'%(ConvertedConfigItem.DeploymentType)'!='WebApplication' And '%(ConvertedConfigItem.DeploymentType)'!='Skip' And '%(ConvertedConfigItem.Identity)'=='$(CheckForDeploymentsToSkipItemid)'">
+				<ShouldDeployApp>$(_ShouldDeployApp)</ShouldDeployApp>
+			</ConvertedConfigItem>
+		</ItemGroup>
+	</Target>
+
+	<Target Name="DeployApplications" DependsOnTargets="$(DeployApplicationsDependsOn)" AfterTargets="Build" BeforeTargets="DeployWebApplications;DeployWindowsServiceApplications;DeployNServiceBusWindowsServiceApplications;DeployDotNetConsoleApplications">			
+	</Target>
+
+	<!-- Deploy Web Applications - executes PowerShell script (DotNetDeployment.psm1) to execute remote windows service deployment if necessary. -->
+	<Target Name="DeployWebApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'"
+				  BuildUri="$(BuildUri)"
+				  Name="Deploying Web Application"
+				  TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				  Message="Deploying Web Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="WebDeploymentStepId" />
+		</BuildStep>
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'"
+			BuildUri="$(BuildUri)"
+			Name="Skipping deployment of Web Application"
+			TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+			Message="Skipping deployment of Web Application %(ConvertedConfigItem.Name).  No changed detected.">
+			<Output TaskParameter="Id" PropertyName="WebDeploymentStepId" />
+		</BuildStep>
+		
+		<PropertyGroup>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSUserCredentials Condition="'%(ConvertedConfigItem.Username)'!=''">-userName '%(ConvertedConfigItem.Username)' -password '%(ConvertedConfigItem.Password)'</PSUserCredentials>
+			<PSKeePassCredentials Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''">-keePassGroup '%(ConvertedConfigItem.KeePassGroup)' -keePassTitle '%(ConvertedConfigItem.KeePassTitle)'</PSKeePassCredentials>
+			<PSGuideWireKeePassCredentials Condition="'%(ConvertedConfigItem.GWUserKeePassTitle)'!=''">-guideWireUserKeePassGroup '%(ConvertedConfigItem.GWUserKeePassGroup)' -guideWireUserKeePassTitle '%(ConvertedConfigItem.GWUserKeePassTitle)'</PSGuideWireKeePassCredentials>
+			<PSDeployWebApplicationsCredentials Condition="'$(PSUserCredentials)' != ''">$(PSUserCredentials)</PSDeployWebApplicationsCredentials>
+			<PSDeployWebApplicationsCredentials Condition="'$(PSUserCredentials)' == ''">$(PSKeePassCredentials)</PSDeployWebApplicationsCredentials>
+			<PSWebApplicationDeploymentCommandLine>Import-Module $(PSDotNetDeploymentModulePath); DeployDotNetWebApplication '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)' '%(ConvertedConfigItem.SiteName)' '%(ConvertedConfigItem.InstallationPath)' $(PSDeployWebApplicationsCredentials) $(PSGuideWireKeePassCredentials)</PSWebApplicationDeploymentCommandLine>
+		</PropertyGroup>
+		
+		<Message Text="Deploying %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName)..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+		<Message Text="Skipping Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName).  No changes detected..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSWebApplicationDeploymentCommandLine)$(_PsCmdEnd)" Condition="'%(ConvertedConfigItem.DeploymentType)'=='WebApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WebApplication'"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)"
+				   Id="$(WebDeploymentStepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkWebDeploymentStepAsFailed" />			
+	</Target>
+
+		<!-- Web Deployment Execution Failure -->
+	<Target Name="MarkWebDeploymentStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(WebDeploymentStepId)"
+				Status="Failed" />
+	</Target>	
+	
+	<!-- Deploy Windows Services - executes PowerShell script (DotNetDeployment.psm1) to execute remote windows service deployment -->	
+	<Target Name="DeployWindowsServiceApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'"
+				  BuildUri="$(BuildUri)"
+				  Name="Deploying Windows Service Application"
+				  TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				  Message="Deploying Windows Service Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="WindowsServiceDeploymentStepId" />
+		</BuildStep>
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'"
+			BuildUri="$(BuildUri)"
+			Name="Skipping Deployment of Windows Service Application"
+			TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+			Message="Skipping Deploying of Windows Service Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="WindowsServiceDeploymentStepId" />
+		</BuildStep>
+
+		<PropertyGroup>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSDeployWindowsServiceApplicationsUserCredentials Condition="'%(ConvertedConfigItem.Username)'!=''">-userName '%(ConvertedConfigItem.Username)' -password '%(ConvertedConfigItem.Password)'</PSDeployWindowsServiceApplicationsUserCredentials>
+			<PSDeployWindowsServiceApplicationsKeePassCredentials Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''">-keePassGroup '%(ConvertedConfigItem.KeePassGroup)' -keePassTitle '%(ConvertedConfigItem.KeePassTitle)'</PSDeployWindowsServiceApplicationsKeePassCredentials>
+			<PSDeployWindowsServiceApplicationsCredentials Condition="'$(PSDeployWindowsServiceApplicationsUserCredentials)' != ''">$(PSDeployWindowsServiceApplicationsUserCredentials)</PSDeployWindowsServiceApplicationsCredentials>
+			<PSDeployWindowsServiceApplicationsCredentials Condition="'$(PSDeployWindowsServiceApplicationsUserCredentials)' == ''">$(PSDeployWindowsServiceApplicationsKeePassCredentials)</PSDeployWindowsServiceApplicationsCredentials>
+			<PSDeployWindowsServiceApplicationsServiceStartUp>%(ConvertedConfigItem.ServiceStartUp)</PSDeployWindowsServiceApplicationsServiceStartUp>
+			<PSDeployWindowsServiceApplicationsAutomaticStartup Condition="'$(PSDeployWindowsServiceApplicationsServiceStartUp.ToUpper())'=='MANUAL'">-automaticStart $false</PSDeployWindowsServiceApplicationsAutomaticStartup>
+			<PSWinServiceDeploymentCommandLine>Import-Module $(PSDotNetDeploymentModulePath); DeployDotNetWindowsService '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)' '%(ConvertedConfigItem.ServiceName)' $(PSDeployWindowsServiceApplicationsCredentials) $(PSDeployWindowsServiceApplicationsAutomaticStartup)</PSWinServiceDeploymentCommandLine>
+		</PropertyGroup>
+		
+		<Message Text="Deploying %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName)..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+		<Message Text="Skipping Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName).  No changes detected..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSWinServiceDeploymentCommandLine)$(_PsCmdEnd)" Condition="'%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='WindowsServiceApplication'"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)"
+				   Id="$(WindowsServiceDeploymentStepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkWindowsServiceDeploymentStepAsFailed" />	
+	</Target>
+
+		<!-- Windows Service Deployment Execution Failure -->
+	<Target Name="MarkWindowsServiceDeploymentStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(WindowsServiceDeploymentStepId)"
+				Status="Failed" />
+	</Target>
+
+	<!-- Deploy NServiceBus Windows Services - executes PowerShell script (DotNetDeployment.psm1) to execute remote NServiceBus windows service deployment -->
+	<Target Name="DeployNServiceBusWindowsServiceApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'"
+				  BuildUri="$(BuildUri)"
+				  Name="Deploying NServiceBus Windows Service Application"
+				  TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				  Message="Deploying NServiceBus Windows Service Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="NServiceBusWindowsServiceDeploymentStepId" />
+		</BuildStep>
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'"
+			BuildUri="$(BuildUri)"
+			Name="Skipping Deployment of NServiceBus Windows Service Application"
+			TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+			Message="Skipping Deployment of NServiceBus Windows Service Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="NServiceBusWindowsServiceDeploymentStepId" />
+		</BuildStep>
+
+		<PropertyGroup>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSDeployNServiceBusWindowsServiceApplicationsUserCredentials Condition="'%(ConvertedConfigItem.Username)'!=''">-userName '%(ConvertedConfigItem.Username)' -password '%(ConvertedConfigItem.Password)'</PSDeployNServiceBusWindowsServiceApplicationsUserCredentials>
+			<PSDeployNServiceBusWindowsServiceApplicationsKeePassCredentials Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''">-keePassGroup '%(ConvertedConfigItem.KeePassGroup)' -keePassTitle '%(ConvertedConfigItem.KeePassTitle)'</PSDeployNServiceBusWindowsServiceApplicationsKeePassCredentials>
+			<PSDeployNServiceBusWindowsServiceApplicationsCredentials Condition="'$(PSDeployNServiceBusWindowsServiceApplicationsUserCredentials)' != ''">$(PSDeployNServiceBusWindowsServiceApplicationsUserCredentials)</PSDeployNServiceBusWindowsServiceApplicationsCredentials>
+			<PSDeployNServiceBusWindowsServiceApplicationsCredentials Condition="'$(PSDeployNServiceBusWindowsServiceApplicationsUserCredentials)' == ''">$(PSDeployNServiceBusWindowsServiceApplicationsKeePassCredentials)</PSDeployNServiceBusWindowsServiceApplicationsCredentials>
+			<PSDeployNServiceBusWindowsServiceApplicationsServiceStartUp>%(ConvertedConfigItem.ServiceStartUp)</PSDeployNServiceBusWindowsServiceApplicationsServiceStartUp>
+			<PSDeployNServiceBusWindowsServiceApplicationsAutomaticStartup Condition="'$(PSDeployNServiceBusWindowsServiceApplicationsServiceStartUp.ToUpper())'=='MANUAL'">-automaticStart $false</PSDeployNServiceBusWindowsServiceApplicationsAutomaticStartup>
+			<PSNServiceBusWinServiceDeploymentCommandLine>Import-Module $(PSDotNetDeploymentModulePath); DeployNServiceBusWindowsService '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)' '%(ConvertedConfigItem.ServiceName)' $(PSDeployNServiceBusWindowsServiceApplicationsCredentials) $(PSDeployNServiceBusWindowsServiceApplicationsAutomaticStartup)</PSNServiceBusWinServiceDeploymentCommandLine>
+		</PropertyGroup>
+
+		<Message Text="Deploying %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName)..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+		<Message Text="Skipping Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName)..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSNServiceBusWinServiceDeploymentCommandLine)$(_PsCmdEnd)" Condition="'%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='NServiceBusWindowsServiceApplication'"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)"
+				   Id="$(NServiceBusWindowsServiceDeploymentStepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkNServiceBusWindowsServiceDeploymentStepAsFailed" />
+	</Target>
+
+	<!-- NServiceBus Windows Service Deployment Execution Failure -->
+	<Target Name="MarkNServiceBusWindowsServiceDeploymentStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(NServiceBusWindowsServiceDeploymentStepId)"
+				Status="Failed" />
+	</Target>
+
+	<!-- Deploy .Net Console Application - executes PowerShell script (DotNetDeployment.psm1) to execute remote Console Application deployment -->
+	<Target Name="DeployDotNetConsoleApplications" AfterTargets="DeployApplications" Outputs="%(ConvertedConfigItem.Identity)">
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'"
+				  BuildUri="$(BuildUri)"
+				  Name="Deploying .Net Console Application"
+				  TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				  Message="Deploying .Net Console Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="ConsoleApplicationDeploymentStepId" />
+		</BuildStep>
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'"
+			BuildUri="$(BuildUri)"
+			Name="Skipping Deployment of .Net Console Application"
+			TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+			Message="Skipping Deployment of .Net Console Application %(ConvertedConfigItem.Name)">
+			<Output TaskParameter="Id" PropertyName="ConsoleApplicationDeploymentStepId" />
+		</BuildStep>
+
+		<PropertyGroup>
+			<PSPackageFilePath>$(OutDir)_PublishedWebsites\%(ConvertedConfigItem.Name)_Package\%(ConvertedConfigItem.Name).zip</PSPackageFilePath>
+			<PSDeployDotNetConsoleApplicationsUserCredentials Condition="'%(ConvertedConfigItem.Username)'!=''">-userName '%(ConvertedConfigItem.Username)' -password '%(ConvertedConfigItem.Password)'</PSDeployDotNetConsoleApplicationsUserCredentials>
+			<PSDeployDotNetConsoleApplicationsKeePassCredentials Condition="'%(ConvertedConfigItem.KeePassTitle)'!=''">-keePassGroup '%(ConvertedConfigItem.KeePassGroup)' -keePassTitle '%(ConvertedConfigItem.KeePassTitle)'</PSDeployDotNetConsoleApplicationsKeePassCredentials>
+			<PSDeployDotNetConsoleApplicationsCredentials Condition="'$(PSDeployDotNetConsoleApplicationsUserCredentials)' != ''">$(PSDeployDotNetConsoleApplicationsUserCredentials)</PSDeployDotNetConsoleApplicationsCredentials>
+			<PSDeployDotNetConsoleApplicationsCredentials Condition="'$(PSDeployDotNetConsoleApplicationsUserCredentials)' == ''">$(PSDeployDotNetConsoleApplicationsKeePassCredentials)</PSDeployDotNetConsoleApplicationsCredentials>
+			<PSConsoleApplicationDeploymentCommandLine>Import-Module $(PSDotNetDeploymentModulePath); DeployDotNetConsoleApp '$(PSPackageFilePath)' '%(ConvertedConfigItem.ServerName)' $(PSDeployDotNetConsoleApplicationsCredentials)</PSConsoleApplicationDeploymentCommandLine>
+		</PropertyGroup>
+
+		<Message Text="Deploying %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName)..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+		<Message Text="Skipping Deployment of %(ConvertedConfigItem.Name) to Server %(ConvertedConfigItem.ServerName).  No changes detected..." Condition="'%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='False'" />
+
+		<Exec Command="$(_PsCmdStart)$(PSConsoleApplicationDeploymentCommandLine)$(_PsCmdEnd)" Condition="'%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication' And '%(ConvertedConfigItem.ShouldDeployApp)'=='True'" />
+
+		<BuildStep Condition="$(BuildUri)!='' And '%(ConvertedConfigItem.DeploymentType)'=='ConsoleApplication'"
+				   TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				   BuildUri="$(BuildUri)"
+				   Id="$(ConsoleApplicationDeploymentStepId)"
+				   Status="Succeeded" />
+		<OnError ExecuteTargets="MarkDotNetConsoleApplicationDeploymentStepAsFailed" />
+	</Target>
+
+	<!-- .Net Console Application Deployment Execution Failure -->
+	<Target Name="MarkDotNetConsoleApplicationDeploymentStepAsFailed">
+		<BuildStep
+				Condition="$(BuildUri)!=''"
+				TeamFoundationServerUrl="$(TeamFoundationServerUrl)"
+				BuildUri="$(BuildUri)"
+				Id="$(ConsoleApplicationDeploymentStepId)"
+				Status="Failed" />
+	</Target>	
+</Project>
+
